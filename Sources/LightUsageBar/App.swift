@@ -158,6 +158,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct LightUsageBarMain {
     static func main() {
         let application = NSApplication.shared
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--render-preview" {
+            do { try PanelPreview.render(to: CommandLine.arguments[2]) }
+            catch { fputs("Preview rendering failed\n", stderr); exit(1) }
+            return
+        }
         let delegate = AppDelegate()
         application.delegate = delegate
         application.setActivationPolicy(.accessory)

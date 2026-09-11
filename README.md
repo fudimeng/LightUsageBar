@@ -2,6 +2,10 @@
 
 An intentionally small native macOS menu-bar app for Claude Code and Codex subscription limits. It has no server, database, analytics, history graph, or third-party runtime dependencies.
 
+<img src="docs/screenshot.png" alt="LightUsageBar allowance panel with Claude and Codex remaining-allowance bars and reset times" width="384">
+
+*Native panel preview rendered with sample data. The current panel uses Chinese labels.*
+
 ## Requirements
 
 - macOS 14 or later
