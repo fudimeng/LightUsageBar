@@ -4,7 +4,7 @@ A lightweight native macOS menu bar app for Claude Code and Codex subscription l
 
 ## What's new
 
-- The panel now follows the system language: Chinese for Chinese systems, English otherwise.
+- The panel supports Chinese and English, selected automatically based on your system language.
 - Localized allowance labels, reset times, menu actions, tooltips, and authentication errors.
 - Restart the app after changing the system language.
 - The app bundle now includes the MIT license.
@@ -30,7 +30,7 @@ Codex requires an installed, signed-in Codex CLI. The app searches `/opt/homebre
 Claude requires valid Claude Code credentials in macOS Keychain; the first launch may request Keychain access.
 If the login expires, open Claude Code or run `/login`, then refresh the app.
 Each user supplies their own account. No account credentials are included in the download.
-Chinese and English interfaces are supported, with English as the fallback.
+Supports Chinese and English, selected automatically based on your system language.
 
 ## Signing status
 
