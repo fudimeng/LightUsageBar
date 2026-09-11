@@ -21,6 +21,7 @@ done
 xcrun lipo -create "${build_dir}/LightUsageBar-arm64" "${build_dir}/LightUsageBar-x86_64" \
     -output "${app_path}/Contents/MacOS/LightUsageBar"
 cp AppResources/Info.plist "${app_path}/Contents/Info.plist"
+cp LICENSE "${app_path}/Contents/Resources/LICENSE"
 xattr -cr "$app_path"
 codesign --force --sign - "$app_path"
 codesign --verify --deep --strict "$app_path"

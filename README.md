@@ -46,3 +46,7 @@ zsh scripts/package-distribution.sh
 ```
 
 This creates the application ZIP and SHA-256 checksum in `dist/`, with debug information removed and source paths remapped.
+
+## License
+
+[MIT License](LICENSE) © 2026 fudimeng.

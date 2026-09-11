@@ -10,6 +10,7 @@ swift build -c release
 
 mkdir -p "${app_path}/Contents/MacOS" "${app_path}/Contents/Resources"
 cp "${project_dir}/AppResources/Info.plist" "${app_path}/Contents/Info.plist"
+cp "${project_dir}/LICENSE" "${app_path}/Contents/Resources/LICENSE"
 cp "${project_dir}/.build/release/LightUsageBar" "${app_path}/Contents/MacOS/LightUsageBar"
 chmod 755 "${app_path}/Contents/MacOS/LightUsageBar"
 
