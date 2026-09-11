@@ -11,14 +11,14 @@ final class ProviderUsageView: NSView {
         let usage: ProviderUsage?
         let unavailable: String
         switch result {
-        case .success(let value): usage = value; unavailable = "未提供该额度"
+        case .success(let value): usage = value; unavailable = L10n.missing
         case .failure(let error): usage = nil; unavailable = error.localizedDescription
-        case nil: usage = nil; unavailable = "正在读取额度…"
+        case nil: usage = nil; unavailable = L10n.loading
         }
         let windows = [usage?.session, usage?.longWindow].compactMap { $0 }
-        row(title: "5 小时剩余额度", window: windows.first { $0.durationMinutes == 300 },
+        row(title: L10n.short, window: windows.first { $0.durationMinutes == 300 },
             y: 38, unavailable: unavailable)
-        row(title: "周剩余额度", window: windows.first { $0.durationMinutes == 10_080 },
+        row(title: L10n.weekly, window: windows.first { $0.durationMinutes == 10_080 },
             y: 109, unavailable: unavailable)
     }
 
@@ -35,7 +35,7 @@ final class ProviderUsageView: NSView {
         bar.setAccessibilityElement(true)
         bar.setAccessibilityRole(.progressIndicator)
         bar.setAccessibilityLabel(title)
-        bar.setAccessibilityValue(window.map { "\($0.remainingPercent)%" } ?? "未提供")
+        bar.setAccessibilityValue(window.map { "\($0.remainingPercent)%" } ?? L10n.missing)
         addSubview(bar)
         let reset = window.map { Self.resetText($0.resetsAt) } ?? unavailable
         let caption = label(reset, frame: NSRect(x: 18, y: y + 37, width: 324, height: 29), size: 11)
@@ -56,18 +56,18 @@ final class ProviderUsageView: NSView {
     }
 
     static func resetText(_ date: Date?) -> String {
-        guard let date else { return "重置时间未提供" }
+        guard let date else { return L10n.text("Reset time unavailable", "重置时间未提供") }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: L10n.isChinese ? "zh_CN" : "en_US_POSIX")
         formatter.timeZone = .current
-        formatter.dateFormat = "MM月dd日 HH:mm"
+        formatter.dateFormat = L10n.isChinese ? "MM月dd日 HH:mm" : "MMM d, HH:mm"
         let offsetMinutes = formatter.timeZone.secondsFromGMT(for: date) / 60
         let sign = offsetMinutes < 0 ? "−" : "+"
         let hours = abs(offsetMinutes) / 60
         let minutes = abs(offsetMinutes) % 60
         let suffix = minutes == 0 ? "" : String(format: ":%02d", minutes)
         let zone = offsetMinutes == 0 ? "UTC" : "UTC\(sign)\(hours)\(suffix)"
-        return "重置于 \(formatter.string(from: date)) \(zone)"
+        return "\(L10n.text("Resets", "重置于")) \(formatter.string(from: date)) \(zone)"
     }
 }
 

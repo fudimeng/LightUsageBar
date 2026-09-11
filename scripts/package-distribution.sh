@@ -30,7 +30,8 @@ if /usr/bin/strings "${app_path}/Contents/MacOS/LightUsageBar" | rg '/Users/|/pr
     echo "Distribution aborted: a personal build path remains." >&2
     exit 1
 fi
-archive="${dist_dir}/LightUsageBar-0.1.0-macos-universal.zip"
+version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' AppResources/Info.plist)
+archive="${dist_dir}/LightUsageBar-${version}-macos-universal.zip"
 ditto -c -k --keepParent --norsrc "$app_path" "$archive"
 (cd "$dist_dir" && shasum -a 256 "${archive:t}" > "${archive:t}.sha256")
 echo "Distribution archive: ${archive}"

@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) { refreshTimer?.invalidate() }
 
     @objc private func refresh() {
-        statusItem.button?.toolTip = "正在刷新剩余额度…"
+        statusItem.button?.toolTip = L10n.text("Refreshing remaining usage…", "正在刷新剩余额度…")
         Task { [weak self] in
             async let codex = CodexUsageFetcher.fetch()
             async let claude = ClaudeUsageFetcher.fetch()
@@ -96,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = ""
         statusItem.button?.image = image
         let description = providers.indices.map {
-            "\(providers[$0])：5 小时剩余 \(values[$0].0)，周剩余 \(values[$0].1)"
+            "\(providers[$0]): \(L10n.short) \(values[$0].0), \(L10n.weekly) \(values[$0].1)"
         }.joined(separator: "\n")
         statusItem.button?.toolTip = description
         statusItem.button?.setAccessibilityLabel(description)
@@ -112,11 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let refreshItem = NSMenuItem(title: "Refresh now", action: #selector(refresh), keyEquivalent: "r")
+        let refreshItem = NSMenuItem(title: L10n.refresh, action: #selector(refresh), keyEquivalent: "r")
         refreshItem.target = self
         refreshItem.isEnabled = true
         menu.addItem(refreshItem)
-        let quitItem = NSMenuItem(title: "Quit LightUsageBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.target = NSApp
         quitItem.isEnabled = true
         menu.addItem(quitItem)
@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct LightUsageBarMain {
     static func main() {
         let application = NSApplication.shared
-        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--render-preview" {
+        if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--render-preview" {
             do { try PanelPreview.render(to: CommandLine.arguments[2]) }
             catch { fputs("Preview rendering failed\n", stderr); exit(1) }
             return
@@ -199,17 +199,17 @@ enum ClaudeUsageFetcher {
         request.timeoutInterval = 20
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw UsageError.unavailable("无法读取服务器响应")
+            throw UsageError.unavailable(L10n.text("Invalid server response", "无法读取服务器响应"))
         }
         switch http.statusCode {
         case 200..<300: break
-        case 401: throw UsageError.unavailable("登录已失效：在 Claude Code 中运行 /login，然后刷新")
-        case 403: throw UsageError.unavailable("无权读取用量 (403)：请在 Claude Code 中重新登录")
-        case 429: throw UsageError.unavailable("请求过于频繁 (429)：请稍后刷新")
-        default: throw UsageError.unavailable("用量请求失败 (HTTP \(http.statusCode))")
+        case 401: throw UsageError.unavailable(L10n.expired)
+        case 403: throw UsageError.unavailable(L10n.text("Access denied (403): sign in to Claude Code again.", "无权读取用量 (403)：请在 Claude Code 中重新登录"))
+        case 429: throw UsageError.unavailable(L10n.text("Too many requests (429): try again later.", "请求过于频繁 (429)：请稍后刷新"))
+        default: throw UsageError.unavailable("\(L10n.text("Usage request failed", "用量请求失败")) (HTTP \(http.statusCode))")
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw UsageError.unavailable("unrecognized usage response")
+            throw UsageError.unavailable(L10n.text("Unrecognized usage response", "无法识别用量响应"))
         }
         return ProviderUsage(provider: "Claude", session: window(json["five_hour"], duration: 300), longWindow: window(json["seven_day"], duration: 10_080), detail: nil)
     }
@@ -231,12 +231,12 @@ enum ClaudeCredentials {
         guard let data = value.data(using: .utf8),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = (json["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String else {
-            throw UsageError.unavailable("sign in to Claude Code first")
+            throw UsageError.unavailable(L10n.signIn)
         }
         if let oauth = json["claudeAiOauth"] as? [String: Any],
            let expiry = oauth["expiresAt"] as? Double,
            expiry / 1000 <= Date().timeIntervalSince1970 {
-            throw UsageError.unavailable("登录已过期：打开 Claude Code；若仍失败，运行 /login")
+            throw UsageError.unavailable(L10n.expired)
         }
         return token
     }
@@ -278,7 +278,7 @@ enum AppServerClient {
                 return object
             }
         }
-        throw UsageError.unavailable("Codex CLI did not return rate limits")
+        throw UsageError.unavailable(L10n.text("Codex CLI did not return rate limits", "Codex CLI 未返回额度"))
     }
 }
 
@@ -292,7 +292,7 @@ enum ProcessRunner {
         process.standardError = Pipe()
         try process.run()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else { throw UsageError.unavailable("sign in to Claude Code first") }
+        guard process.terminationStatus == 0 else { throw UsageError.unavailable(L10n.signIn) }
         return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     }
 }

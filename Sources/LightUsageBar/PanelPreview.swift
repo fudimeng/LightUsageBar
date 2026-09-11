@@ -17,7 +17,7 @@ enum PanelPreview {
             panel.frame.origin = NSPoint(x: 12, y: index == 0 ? 234 : 42)
             canvas.addSubview(panel)
         }
-        let footer = NSTextField(labelWithString: "Refresh now                                      Quit LightUsageBar")
+        let footer = NSTextField(labelWithString: "\(L10n.refresh)                         \(L10n.quit)")
         footer.frame = NSRect(x: 30, y: 13, width: 324, height: 20)
         footer.font = .systemFont(ofSize: 12)
         canvas.addSubview(footer)

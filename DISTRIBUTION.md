@@ -1,10 +1,17 @@
-# LightUsageBar 0.1.0
+# LightUsageBar 0.1.1
 
 A lightweight native macOS menu bar app for Claude Code and Codex subscription limits.
 
+## What's new
+
+- The panel now follows the system language: Chinese for Chinese systems, English otherwise.
+- Localized allowance labels, reset times, menu actions, tooltips, and authentication errors.
+- Restart the app after changing the system language.
+- The app bundle now includes the MIT license.
+
 ## Download and install
 
-Download `LightUsageBar-0.1.0-macos-universal.zip` from the release assets, unzip it,
+Download `LightUsageBar-0.1.1-macos-universal.zip` from the release assets, unzip it,
 and drag `LightUsageBar.app` to Applications. Launch it to find it in the menu bar.
 Requires macOS 14 or later; supports both Apple Silicon and Intel.
 A SHA-256 checksum file is provided alongside the ZIP.
@@ -23,7 +30,7 @@ Codex requires an installed, signed-in Codex CLI. The app searches `/opt/homebre
 Claude requires valid Claude Code credentials in macOS Keychain; the first launch may request Keychain access.
 If the login expires, open Claude Code or run `/login`, then refresh the app.
 Each user supplies their own account. No account credentials are included in the download.
-The current allowance panel uses Chinese labels.
+Chinese and English interfaces are supported, with English as the fallback.
 
 ## Signing status
 
@@ -34,4 +41,4 @@ If that option is unavailable or device policy prevents it, wait for a Developer
 ## Build and license
 
 Run `zsh scripts/package-distribution.sh` from the project directory to create a ZIP and checksum in `dist/`.
-Licensed under the MIT License. The LICENSE file is included as a separate release asset.
+Licensed under the MIT License. The LICENSE file is included in the app and as a separate release asset.

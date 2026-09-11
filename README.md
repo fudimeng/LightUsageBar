@@ -4,7 +4,7 @@ An intentionally small native macOS menu-bar app for Claude Code and Codex subsc
 
 <img src="docs/screenshot.png" alt="LightUsageBar allowance panel with Claude and Codex remaining-allowance bars and reset times" width="384">
 
-*Native panel preview rendered with sample data. The current panel uses Chinese labels.*
+*Native panel preview rendered with sample data. The interface follows the system language: Chinese or English (fallback). Restart the app after changing the system language.*
 
 ## Requirements
 
