@@ -26,7 +26,7 @@ enum UsageError: LocalizedError {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let refreshInterval: TimeInterval = 5 * 60
     private var refreshTimer: Timer?
@@ -123,9 +123,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        menu.delegate = self
         for name in ["Claude", "Codex"] {
             let item = NSMenuItem()
             item.view = ProviderUsageView(name: name, result: latest[name])
+            item.representedObject = name
             item.isEnabled = true
             menu.addItem(item)
         }
@@ -139,6 +141,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quitItem.isEnabled = true
         menu.addItem(quitItem)
         statusItem.menu = menu
+    }
+
+    /// Rebuild provider panels on open so reset countdowns are current, not as of the last refresh.
+    func menuWillOpen(_ menu: NSMenu) {
+        for item in menu.items {
+            guard let name = item.representedObject as? String else { continue }
+            item.view = ProviderUsageView(name: name, result: latest[name])
+        }
     }
 
     private func text(for name: String) -> String {
