@@ -23,7 +23,7 @@ If you trust the source, use System Settings → Privacy & Security → Open Any
 See [installation and distribution notes](DISTRIBUTION.md).
 
 Each provider shows two menu-bar numbers: 5-hour remaining allowance above, weekly remaining allowance below.
-The panel shows horizontal remaining-allowance bars and reset times to the minute with the local UTC offset.
+The panel shows horizontal remaining-allowance bars and a countdown to each reset followed by the local reset time, for example “2d 3h 15m (09-20 16:50)”.
 Missing windows display “—”. Claude access tokens are short-lived and renewed by Claude Code itself; if one expires, use Claude Code briefly and refresh.
 
 ## Build and run

@@ -7,7 +7,7 @@ enum PanelPreview {
         canvas.appearance = NSAppearance(named: .aqua)
         canvas.wantsLayer = true
         canvas.layer?.backgroundColor = NSColor(calibratedWhite: 0.97, alpha: 1).cgColor
-        let reset = ISO8601DateFormatter().date(from: "2026-09-11T10:30:00Z")!
+        let reset = Date().addingTimeInterval(2 * 3600 + 13 * 60 + 30)
         for (index, name) in ["Claude", "Codex"].enumerated() {
             let data = ProviderUsage(provider: name,
                 session: UsageWindow(usedPercent: index == 0 ? 28 : 54, resetsAt: reset, durationMinutes: 300),

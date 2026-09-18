@@ -55,19 +55,25 @@ final class ProviderUsageView: NSView {
         return field
     }
 
-    static func resetText(_ date: Date?) -> String {
+    /// "2天3小时15分后重置（09-20 16:50）": countdown first, then the local reset moment.
+    static func resetText(_ date: Date?, now: Date = Date()) -> String {
         guard let date else { return L10n.text("Reset time unavailable", "重置时间未提供") }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: L10n.isChinese ? "zh_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
-        formatter.dateFormat = L10n.isChinese ? "MM月dd日 HH:mm" : "MMM d, HH:mm"
-        let offsetMinutes = formatter.timeZone.secondsFromGMT(for: date) / 60
-        let sign = offsetMinutes < 0 ? "−" : "+"
-        let hours = abs(offsetMinutes) / 60
-        let minutes = abs(offsetMinutes) % 60
-        let suffix = minutes == 0 ? "" : String(format: ":%02d", minutes)
-        let zone = offsetMinutes == 0 ? "UTC" : "UTC\(sign)\(hours)\(suffix)"
-        return "\(L10n.text("Resets", "重置于")) \(formatter.string(from: date)) \(zone)"
+        formatter.dateFormat = "MM-dd HH:mm"
+        let moment = formatter.string(from: date)
+        let totalMinutes = Int(date.timeIntervalSince(now) / 60)
+        guard totalMinutes > 0 else {
+            return L10n.text("Resetting now (\(moment))", "即将重置（\(moment)）")
+        }
+        let days = totalMinutes / 1440, hours = totalMinutes % 1440 / 60, minutes = totalMinutes % 60
+        var parts: [String] = []
+        if days > 0 { parts.append(L10n.text("\(days)d", "\(days)天")) }
+        if days > 0 || hours > 0 { parts.append(L10n.text("\(hours)h", "\(hours)小时")) }
+        parts.append(L10n.text("\(minutes)m", "\(minutes)分"))
+        return L10n.text("Resets in \(parts.joined(separator: " ")) (\(moment))",
+                         "\(parts.joined())后重置（\(moment)）")
     }
 }
 
