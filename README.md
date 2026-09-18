@@ -24,7 +24,7 @@ See [installation and distribution notes](DISTRIBUTION.md).
 
 Each provider shows two menu-bar numbers: 5-hour remaining allowance above, weekly remaining allowance below.
 The panel shows horizontal remaining-allowance bars and reset times to the minute with the local UTC offset.
-Missing windows display “—”. Claude login expiration requires refreshing your Claude Code login.
+Missing windows display “—”. Claude access tokens are short-lived and renewed by Claude Code itself; if one expires, use Claude Code briefly and refresh.
 
 ## Build and run
 
