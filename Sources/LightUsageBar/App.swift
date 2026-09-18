@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let refreshInterval: TimeInterval = 5 * 60
     private var refreshTimer: Timer?
     private var latest: [String: Result<ProviderUsage, Error>] = [:]
+    private var inFlight: Set<String> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -46,19 +47,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) { refreshTimer?.invalidate() }
 
     @objc private func refresh() {
-        statusItem.button?.toolTip = L10n.text("Refreshing remaining usage…", "正在刷新剩余额度…")
-        Task { [weak self] in
-            async let codex = CodexUsageFetcher.fetch()
-            async let claude = ClaudeUsageFetcher.fetch()
-            let codexResult: Result<ProviderUsage, Error>
-            let claudeResult: Result<ProviderUsage, Error>
-            do { codexResult = .success(try await codex) } catch { codexResult = .failure(error) }
-            do { claudeResult = .success(try await claude) } catch { claudeResult = .failure(error) }
-            guard let self else { return }
-            self.latest = ["Codex": codexResult, "Claude": claudeResult]
-            self.updateStatusText()
-            self.rebuildMenu()
+        load("Claude", timeout: 90) { try await ClaudeUsageFetcher.fetch() }
+        load("Codex", timeout: 20) { try await CodexUsageFetcher.fetch() }
+    }
+
+    /// Loads one provider independently so a slow or stuck provider never delays the other.
+    /// A timeout shows an error in the panel; a late result still replaces it when it arrives.
+    private func load(_ name: String, timeout: TimeInterval,
+                      _ fetch: @escaping @Sendable () async throws -> ProviderUsage) {
+        guard !inFlight.contains(name) else { return }
+        inFlight.insert(name)
+        let work = Task.detached(priority: .utility) { try await fetch() }
+        let watchdog = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout))
+            guard !Task.isCancelled, let self else { return }
+            self.apply(name, .failure(UsageError.unavailable(L10n.timedOut)))
         }
+        Task { [weak self] in
+            let result: Result<ProviderUsage, Error>
+            do { result = .success(try await work.value) } catch { result = .failure(error) }
+            watchdog.cancel()
+            guard let self else { return }
+            self.inFlight.remove(name)
+            self.apply(name, result)
+        }
+    }
+
+    private func apply(_ name: String, _ result: Result<ProviderUsage, Error>) {
+        latest[name] = result
+        updateStatusText()
+        rebuildMenu()
     }
 
     private func updateStatusText() {
@@ -227,7 +245,15 @@ enum ClaudeUsageFetcher {
 
 enum ClaudeCredentials {
     static func token() throws -> String {
-        let value = try ProcessRunner.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        let value: String
+        switch ProcessRunner.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], timeout: 60) {
+        case .success(let output): value = output
+        case .timedOut: throw UsageError.unavailable(L10n.keychainPending)
+        // errSecItemNotFound: Claude Code has never stored a login on this Mac.
+        case .failed(let status) where status == 44: throw UsageError.unavailable(L10n.signIn)
+        case .failed: throw UsageError.unavailable(L10n.keychainDenied)
+        case .launchFailed: throw UsageError.unavailable(L10n.keychainDenied)
+        }
         guard let data = value.data(using: .utf8),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = (json["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String else {
@@ -256,7 +282,9 @@ enum AppServerClient {
         process.standardOutput = output
         process.standardError = Pipe()
         try process.run()
-        defer { if process.isRunning { process.terminate() } }
+        // availableData blocks until output arrives, so the deadline must end the process itself.
+        let watchdog = ProcessWatchdog(process, after: 12)
+        defer { watchdog.cancel(); if process.isRunning { process.terminate() } }
 
         let initialize: [String: Any] = ["id": 1, "method": "initialize", "params": ["clientInfo": ["name": "LightUsageBar", "version": "0.1"]]]
         let initialized: [String: Any] = ["method": "initialized"]
@@ -267,8 +295,7 @@ enum AppServerClient {
         }
 
         var buffer = Data()
-        let deadline = Date().addingTimeInterval(12)
-        while Date() < deadline {
+        while true {
             let chunk = output.fileHandleForReading.availableData
             guard !chunk.isEmpty else { break }
             buffer.append(chunk)
@@ -283,16 +310,52 @@ enum AppServerClient {
 }
 
 enum ProcessRunner {
-    static func run(_ executable: String, _ arguments: [String]) throws -> String {
+    enum Outcome {
+        case success(String)
+        case failed(Int32)
+        case timedOut
+        case launchFailed
+    }
+
+    static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval) -> Outcome {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
-        try process.run()
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return .launchFailed }
+        let watchdog = ProcessWatchdog(process, after: timeout)
+        // Drain stdout before waiting: Claude credentials can exceed the 64 KB pipe buffer,
+        // and waiting first deadlocks with the child blocked on write.
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else { throw UsageError.unavailable(L10n.signIn) }
-        return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        watchdog.cancel()
+        if watchdog.fired { return .timedOut }
+        guard process.terminationStatus == 0 else { return .failed(process.terminationStatus) }
+        return .success(String(decoding: output, as: UTF8.self))
     }
+}
+
+/// Terminates a child process if it is still running after a deadline.
+final class ProcessWatchdog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didFire = false
+    private var item: DispatchWorkItem?
+
+    /// True when the deadline passed and the process was terminated by this watchdog.
+    var fired: Bool { lock.withLock { didFire } }
+
+    init(_ process: Process, after seconds: TimeInterval) {
+        let target = process
+        let item = DispatchWorkItem { [weak self] in
+            guard target.isRunning else { return }
+            self?.lock.withLock { self?.didFire = true }
+            target.terminate()
+        }
+        self.item = item
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds, execute: item)
+    }
+
+    func cancel() { item?.cancel() }
 }
