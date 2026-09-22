@@ -27,7 +27,7 @@ enum UsageError: LocalizedError {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private var statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let refreshInterval: TimeInterval = 5 * 60
     private var refreshTimer: Timer?
     private var latest: [String: Result<ProviderUsage, Error>] = [:]
@@ -45,6 +45,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) { refreshTimer?.invalidate() }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Re-register with the system when the user explicitly opens the running app.
+        NSStatusBar.system.removeStatusItem(statusItem)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.isVisible = true
+        updateStatusText()
+        rebuildMenu()
+        return true
+    }
 
     @objc private func refresh() {
         load("Claude", timeout: 90) { try await ClaudeUsageFetcher.fetch() }
