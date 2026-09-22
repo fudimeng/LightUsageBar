@@ -24,7 +24,7 @@ See [installation and distribution notes](DISTRIBUTION.md).
 
 Each provider shows two menu-bar numbers: 5-hour remaining allowance above, weekly remaining allowance below.
 The panel shows horizontal remaining-allowance bars and a countdown to each reset followed by the local reset time, for example “2d 3h 15m (09-20 16:50)”.
-Missing windows display “—”. Claude access tokens are short-lived and renewed by Claude Code itself; if one expires, use Claude Code briefly and refresh.
+Missing windows display “—”. Expired Claude access tokens are renewed automatically.
 
 ## Build and run
 
@@ -39,7 +39,8 @@ The app uses the menu bar only. It refreshes every five minutes and can be refre
 
 - Codex is queried through its local `codex app-server --stdio` protocol.
 - Claude's OAuth access token is read from the existing `Claude Code-credentials` Keychain entry and sent only to Anthropic's OAuth usage endpoint.
-- No credential, usage value, or log is written to disk by this app.
+- When that token has expired, the app renews it with Claude Code's refresh token at Anthropic's OAuth token endpoint and saves the result back to the same Keychain entry, exactly as Claude Code does. It holds Claude Code's own refresh lock while doing so, so the two never renew at the same time. This is needed because the Claude desktop app keeps its login separately and does not renew this entry.
+- No usage value or log is written to disk by this app, and no credential is stored anywhere except that Keychain entry.
 
 The provider endpoints and CLI protocol can change. Errors are shown in the menu instead of being silently hidden.
 

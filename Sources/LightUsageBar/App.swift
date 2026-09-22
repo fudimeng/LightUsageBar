@@ -186,6 +186,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 struct LightUsageBarMain {
     static func main() {
         let application = NSApplication.shared
+        if CommandLine.arguments.count >= 2, CommandLine.arguments[1] == "--renew-claude-token" {
+            // Diagnostic: renew the Claude access token once and print only the new expiry.
+            let done = DispatchSemaphore(value: 0)
+            Task.detached {
+                do { print("Claude token renewed, expires \(try await ClaudeCredentials.renewForDiagnostics())") }
+                catch { fputs("Renewal failed: \(error.localizedDescription)\n", stderr) }
+                done.signal()
+            }
+            done.wait()
+            return
+        }
         if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--render-preview" {
             do { try PanelPreview.render(to: CommandLine.arguments[2]) }
             catch { fputs("Preview rendering failed\n", stderr); exit(1) }
@@ -218,7 +229,16 @@ enum CodexUsageFetcher {
 
 enum ClaudeUsageFetcher {
     static func fetch() async throws -> ProviderUsage {
-        let token = try await Task.detached(priority: .utility) { try ClaudeCredentials.token() }.value
+        let token = try await ClaudeCredentials.token()
+        let (data, http) = try await requestUsage(token)
+        guard http.statusCode == 401 else { return try parse(data, http) }
+        // The server can revoke a token before its stated expiry; renew once and retry.
+        let renewed = try await ClaudeCredentials.token(forceRefresh: true)
+        let (retryData, retryHTTP) = try await requestUsage(renewed)
+        return try parse(retryData, retryHTTP)
+    }
+
+    private static func requestUsage(_ token: String) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("LightUsageBar/0.1", forHTTPHeaderField: "User-Agent")
@@ -229,6 +249,10 @@ enum ClaudeUsageFetcher {
         guard let http = response as? HTTPURLResponse else {
             throw UsageError.unavailable(L10n.text("Invalid server response", "无法读取服务器响应"))
         }
+        return (data, http)
+    }
+
+    private static func parse(_ data: Data, _ http: HTTPURLResponse) throws -> ProviderUsage {
         switch http.statusCode {
         case 200..<300: break
         case 401: throw UsageError.unavailable(L10n.expired)
@@ -250,31 +274,6 @@ enum ClaudeUsageFetcher {
             formatter.date(from: $0) ?? ISO8601DateFormatter().date(from: $0)
         }
         return UsageWindow(usedPercent: Int(used.rounded()), resetsAt: reset, durationMinutes: duration)
-    }
-}
-
-enum ClaudeCredentials {
-    static func token() throws -> String {
-        let value: String
-        switch ProcessRunner.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], timeout: 60) {
-        case .success(let output): value = output
-        case .timedOut: throw UsageError.unavailable(L10n.keychainPending)
-        // errSecItemNotFound: Claude Code has never stored a login on this Mac.
-        case .failed(let status) where status == 44: throw UsageError.unavailable(L10n.signIn)
-        case .failed: throw UsageError.unavailable(L10n.keychainDenied)
-        case .launchFailed: throw UsageError.unavailable(L10n.keychainDenied)
-        }
-        guard let data = value.data(using: .utf8),
-              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = (json["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String else {
-            throw UsageError.unavailable(L10n.signIn)
-        }
-        if let oauth = json["claudeAiOauth"] as? [String: Any],
-           let expiry = oauth["expiresAt"] as? Double,
-           expiry / 1000 <= Date().timeIntervalSince1970 {
-            throw UsageError.unavailable(L10n.expired)
-        }
-        return token
     }
 }
 
