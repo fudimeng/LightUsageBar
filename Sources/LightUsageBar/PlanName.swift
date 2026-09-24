@@ -1,20 +1,17 @@
 import Foundation
 
-/// Turns the plan identifiers the providers report into the names they use publicly.
+/// Turns the plan identifiers the providers report into plain plan names such as "Pro" or "Max",
+/// without the finer grades the providers distinguish internally.
 enum PlanName {
-    /// Claude reports the plan in its stored login: "max" plus a rate-limit tier
-    /// such as "default_claude_max_5x", which is the 5× Max plan.
-    static func claude(subscription: String?, tier: String?) -> String? {
+    /// Claude reports the plan in its stored login as subscriptionType, for example "max".
+    static func claude(_ subscription: String?) -> String? {
         guard let subscription, !subscription.isEmpty else { return nil }
-        let multiplier = tier.flatMap { value -> String? in
-            guard let match = value.range(of: #"(\d+)x"#, options: [.regularExpression, .caseInsensitive]) else { return nil }
-            return String(value[match]).lowercased().replacingOccurrences(of: "x", with: "×")
-        }
         switch subscription.lowercased() {
-        case "max": return multiplier.map { "Max \($0)" } ?? "Max"
+        case "max": return "Max"
         case "pro": return "Pro"
-        case "team", "enterprise": return subscription.capitalized
         case "free": return "Free"
+        case "team": return "Team"
+        case "enterprise": return "Enterprise"
         default: return readable(subscription)
         }
     }
@@ -23,13 +20,13 @@ enum PlanName {
     static func codex(_ planType: String?) -> String? {
         guard let planType, !planType.isEmpty else { return nil }
         switch planType.lowercased() {
-        case "prolite": return "Pro Lite"
-        case "pro": return "Pro"
+        // Pro Lite is graded below Pro; both read as Pro here.
+        case "pro", "prolite": return "Pro"
         case "plus": return "Plus"
+        case "free": return "Free"
         case "team", "business": return "Team"
         case "edu": return "Edu"
         case "enterprise": return "Enterprise"
-        case "free": return "Free"
         default: return readable(planType)
         }
     }

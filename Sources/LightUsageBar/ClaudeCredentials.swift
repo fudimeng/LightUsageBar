@@ -23,8 +23,7 @@ enum ClaudeCredentials {
         let stored = try readKeychain()
         let oauth = try loginSection(stored)
         guard let access = oauth["accessToken"] as? String else { throw UsageError.unavailable(L10n.signIn) }
-        let plan = PlanName.claude(subscription: oauth["subscriptionType"] as? String,
-                                   tier: oauth["rateLimitTier"] as? String)
+        let plan = PlanName.claude(oauth["subscriptionType"] as? String)
         if !forceRefresh, isFresh(oauth) { return Login(token: access, plan: plan) }
         return Login(token: try await renew(previousAccess: access), plan: plan)
     }

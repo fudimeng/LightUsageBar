@@ -13,7 +13,7 @@ enum PanelPreview {
                 session: UsageWindow(usedPercent: index == 0 ? 28 : 54, resetsAt: reset, durationMinutes: 300),
                 longWindow: UsageWindow(usedPercent: index == 0 ? 12 : 38,
                     resetsAt: reset.addingTimeInterval(5 * 86400), durationMinutes: 10080),
-                plan: index == 0 ? "Max 5×" : "Pro")
+                plan: index == 0 ? "Max" : "Pro")
             let panel = ProviderUsageView(name: name, result: .success(data))
             panel.frame.origin = NSPoint(x: 12, y: index == 0 ? 234 : 42)
             canvas.addSubview(panel)
