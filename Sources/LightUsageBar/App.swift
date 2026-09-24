@@ -13,7 +13,8 @@ struct ProviderUsage: Sendable {
     let provider: String
     let session: UsageWindow?
     let longWindow: UsageWindow?
-    let detail: String?
+    /// Subscription plan as shown next to the provider name, for example "Max 5×".
+    let plan: String?
 }
 
 enum UsageError: LocalizedError {
@@ -216,7 +217,9 @@ enum CodexUsageFetcher {
             let result = response["result"] as? [String: Any] ?? [:]
             let snapshot = (result["rateLimitsByLimitId"] as? [String: Any])?["codex"] as? [String: Any]
                 ?? result["rateLimits"] as? [String: Any] ?? [:]
-            return ProviderUsage(provider: "Codex", session: window(snapshot["primary"]), longWindow: window(snapshot["secondary"]), detail: nil)
+            return ProviderUsage(provider: "Codex", session: window(snapshot["primary"]),
+                                 longWindow: window(snapshot["secondary"]),
+                                 plan: PlanName.codex(snapshot["planType"] as? String))
         }.value
     }
 
@@ -229,13 +232,13 @@ enum CodexUsageFetcher {
 
 enum ClaudeUsageFetcher {
     static func fetch() async throws -> ProviderUsage {
-        let token = try await ClaudeCredentials.token()
-        let (data, http) = try await requestUsage(token)
-        guard http.statusCode == 401 else { return try parse(data, http) }
+        let login = try await ClaudeCredentials.login()
+        let (data, http) = try await requestUsage(login.token)
+        guard http.statusCode == 401 else { return try parse(data, http, plan: login.plan) }
         // The server can revoke a token before its stated expiry; renew once and retry.
-        let renewed = try await ClaudeCredentials.token(forceRefresh: true)
-        let (retryData, retryHTTP) = try await requestUsage(renewed)
-        return try parse(retryData, retryHTTP)
+        let renewed = try await ClaudeCredentials.login(forceRefresh: true)
+        let (retryData, retryHTTP) = try await requestUsage(renewed.token)
+        return try parse(retryData, retryHTTP, plan: renewed.plan)
     }
 
     private static func requestUsage(_ token: String) async throws -> (Data, HTTPURLResponse) {
@@ -252,7 +255,7 @@ enum ClaudeUsageFetcher {
         return (data, http)
     }
 
-    private static func parse(_ data: Data, _ http: HTTPURLResponse) throws -> ProviderUsage {
+    private static func parse(_ data: Data, _ http: HTTPURLResponse, plan: String?) throws -> ProviderUsage {
         switch http.statusCode {
         case 200..<300: break
         case 401: throw UsageError.unavailable(L10n.expired)
@@ -263,7 +266,8 @@ enum ClaudeUsageFetcher {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw UsageError.unavailable(L10n.text("Unrecognized usage response", "无法识别用量响应"))
         }
-        return ProviderUsage(provider: "Claude", session: window(json["five_hour"], duration: 300), longWindow: window(json["seven_day"], duration: 10_080), detail: nil)
+        return ProviderUsage(provider: "Claude", session: window(json["five_hour"], duration: 300),
+                             longWindow: window(json["seven_day"], duration: 10_080), plan: plan)
     }
 
     private static func window(_ value: Any?, duration: Int) -> UsageWindow? {

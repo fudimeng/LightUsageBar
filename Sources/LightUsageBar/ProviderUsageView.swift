@@ -7,13 +7,19 @@ final class ProviderUsageView: NSView {
 
     init(name: String, result: Result<ProviderUsage, Error>?) {
         super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 186))
-        label(name, frame: NSRect(x: 18, y: 9, width: 324, height: 22), size: 14, weight: .semibold)
         let usage: ProviderUsage?
         let unavailable: String
         switch result {
         case .success(let value): usage = value; unavailable = L10n.missing
         case .failure(let error): usage = nil; unavailable = error.localizedDescription
         case nil: usage = nil; unavailable = L10n.loading
+        }
+        let title = label(name, frame: NSRect(x: 18, y: 9, width: 324, height: 22), size: 14, weight: .semibold)
+        if let plan = usage?.plan {
+            // Sits right after the provider name, quieter so the name still leads.
+            let start = 18 + ceil(title.attributedStringValue.size().width) + 8
+            let badge = label(plan, frame: NSRect(x: start, y: 11, width: 324 - start + 18, height: 18), size: 11)
+            badge.textColor = .secondaryLabelColor
         }
         let windows = [usage?.session, usage?.longWindow].compactMap { $0 }
         row(title: L10n.short, window: windows.first { $0.durationMinutes == 300 },

@@ -14,16 +14,23 @@ enum ClaudeCredentials {
     /// Renew slightly early so a request never starts with a token about to lapse.
     private static let renewalMargin: TimeInterval = 5 * 60
 
-    static func token(forceRefresh: Bool = false) async throws -> String {
+    struct Login {
+        let token: String
+        let plan: String?
+    }
+
+    static func login(forceRefresh: Bool = false) async throws -> Login {
         let stored = try readKeychain()
         let oauth = try loginSection(stored)
         guard let access = oauth["accessToken"] as? String else { throw UsageError.unavailable(L10n.signIn) }
-        if !forceRefresh, isFresh(oauth) { return access }
-        return try await renew(previousAccess: access)
+        let plan = PlanName.claude(subscription: oauth["subscriptionType"] as? String,
+                                   tier: oauth["rateLimitTier"] as? String)
+        if !forceRefresh, isFresh(oauth) { return Login(token: access, plan: plan) }
+        return Login(token: try await renew(previousAccess: access), plan: plan)
     }
 
     static func renewForDiagnostics() async throws -> String {
-        _ = try await token(forceRefresh: true)
+        _ = try await login(forceRefresh: true)
         let oauth = try loginSection(try readKeychain())
         let expiry = Date(timeIntervalSince1970: ((oauth["expiresAt"] as? Double) ?? 0) / 1000)
         return expiry.formatted(date: .abbreviated, time: .shortened)
