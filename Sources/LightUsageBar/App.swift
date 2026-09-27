@@ -33,6 +33,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var refreshTimer: Timer?
     private var latest: [String: Result<ProviderUsage, Error>] = [:]
     private var inFlight: Set<String> = []
+    private lazy var settingsWindow: SettingsWindowController = {
+        let controller = SettingsWindowController()
+        controller.onChange = { [weak self] provider, enabled in
+            guard let self else { return }
+            if !enabled { self.latest.removeValue(forKey: provider.rawValue) }
+            self.updateStatusText()
+            self.rebuildMenu()
+            if enabled { self.refreshProvider(provider) }
+        }
+        controller.onRefresh = { [weak self] in self?.refresh() }
+        return controller
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -40,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         rebuildMenu()
         refresh()
+        if !ProviderSettings.shared.hasSavedSelection { settingsWindow.present() }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -58,8 +71,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func refresh() {
-        load("Claude", timeout: 90) { try await ClaudeUsageFetcher.fetch() }
-        load("Codex", timeout: 20) { try await CodexUsageFetcher.fetch() }
+        for provider in UsageProvider.allCases where ProviderSettings.shared.enabled.contains(provider) {
+            refreshProvider(provider)
+        }
+    }
+
+    private func refreshProvider(_ provider: UsageProvider) {
+        switch provider {
+        case .claude: load(provider.rawValue, timeout: 90) { try await ClaudeUsageFetcher.fetch() }
+        case .codex: load(provider.rawValue, timeout: 20) { try await CodexUsageFetcher.fetch() }
+        }
     }
 
     /// Loads one provider independently so a slow or stuck provider never delays the other.
@@ -85,15 +106,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func apply(_ name: String, _ result: Result<ProviderUsage, Error>) {
+        guard let provider = UsageProvider(rawValue: name), ProviderSettings.shared.enabled.contains(provider) else { return }
         latest[name] = result
+        settingsWindow.updateStatus(provider, result: result)
         updateStatusText()
         rebuildMenu()
     }
 
     private func updateStatusText() {
-        let providers = ["Claude", "Codex"]
-        let values = providers.map { name -> (String, String) in
-            guard case .success(let usage)? = latest[name] else { return ("—", "—") }
+        let providers = UsageProvider.allCases.filter { ProviderSettings.shared.enabled.contains($0) }
+        let values = providers.map { provider -> (String, String) in
+            guard case .success(let usage)? = latest[provider.rawValue] else { return ("—", "—") }
             let windows = [usage.session, usage.longWindow].compactMap { $0 }
             let short = windows.first { $0.durationMinutes == 300 }
             let weekly = windows.first { $0.durationMinutes == 10_080 }
@@ -102,7 +125,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // Template artwork inherits the menu bar's light/dark and selected colors.
         // A 20-point canvas keeps both lines inside the standard menu bar height.
-        let image = NSImage(size: NSSize(width: 104, height: 20))
+        guard !providers.isEmpty else {
+            statusItem.button?.image = NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: L10n.settings)
+            statusItem.button?.title = ""
+            statusItem.button?.toolTip = L10n.configurePrompt
+            statusItem.button?.setAccessibilityLabel(L10n.configurePrompt)
+            return
+        }
+        let image = NSImage(size: NSSize(width: CGFloat(providers.count * 54 - 4), height: 20))
         image.lockFocus()
         let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
         let paragraph = NSMutableParagraphStyle()
@@ -112,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ]
         for index in providers.indices {
             let x = CGFloat(index * 54)
-            let label = index == 0 ? "C" : "X"
+            let label = providers[index] == .claude ? "C" : "X"
             (label as NSString).draw(at: NSPoint(x: x, y: 3.5), withAttributes: [
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                 .foregroundColor: NSColor.black
@@ -125,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.title = ""
         statusItem.button?.image = image
         let description = providers.indices.map {
-            "\(providers[$0]): \(L10n.short) \(values[$0].0), \(L10n.weekly) \(values[$0].1)"
+            "\(providers[$0].rawValue): \(L10n.short) \(values[$0].0), \(L10n.weekly) \(values[$0].1)"
         }.joined(separator: "\n")
         statusItem.button?.toolTip = description
         statusItem.button?.setAccessibilityLabel(description)
@@ -135,7 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
-        for name in ["Claude", "Codex"] {
+        for provider in UsageProvider.allCases where ProviderSettings.shared.enabled.contains(provider) {
+            let name = provider.rawValue
             let item = NSMenuItem()
             item.view = ProviderUsageView(name: name, result: latest[name])
             item.representedObject = name
@@ -143,6 +174,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        if ProviderSettings.shared.enabled.isEmpty {
+            let hint = NSMenuItem(title: L10n.configurePrompt, action: #selector(openSettings), keyEquivalent: "")
+            hint.target = self
+            hint.isEnabled = true
+            menu.addItem(hint)
+        }
+        let settingsItem = NSMenuItem(title: L10n.settings, action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        settingsItem.isEnabled = true
+        menu.addItem(settingsItem)
         let refreshItem = NSMenuItem(title: L10n.refresh, action: #selector(refresh), keyEquivalent: "r")
         refreshItem.target = self
         refreshItem.isEnabled = true
@@ -152,6 +193,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         quitItem.isEnabled = true
         menu.addItem(quitItem)
         statusItem.menu = menu
+    }
+
+    @objc private func openSettings() {
+        let controller = settingsWindow
+        for provider in UsageProvider.allCases { controller.updateStatus(provider, result: latest[provider.rawValue]) }
+        controller.present()
     }
 
     /// Rebuild provider panels on open so reset countdowns are current, not as of the last refresh.
@@ -224,11 +271,17 @@ enum CodexUsageFetcher {
     static func fetch() async throws -> ProviderUsage {
         try await Task.detached(priority: .utility) {
             let response = try AppServerClient.requestRateLimits()
+            if let error = response["error"] as? [String: Any] {
+                let message = error["message"] as? String ?? L10n.codexSignIn
+                throw UsageError.unavailable(message)
+            }
             let result = response["result"] as? [String: Any] ?? [:]
             let snapshot = (result["rateLimitsByLimitId"] as? [String: Any])?["codex"] as? [String: Any]
                 ?? result["rateLimits"] as? [String: Any] ?? [:]
-            return ProviderUsage(provider: "Codex", session: window(snapshot["primary"]),
-                                 longWindow: window(snapshot["secondary"]),
+            let session = window(snapshot["primary"])
+            let longWindow = window(snapshot["secondary"])
+            guard session != nil || longWindow != nil else { throw UsageError.unavailable(L10n.codexSignIn) }
+            return ProviderUsage(provider: "Codex", session: session, longWindow: longWindow,
                                  plan: PlanName.codex(snapshot["planType"] as? String))
         }.value
     }
