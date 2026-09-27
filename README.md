@@ -9,8 +9,8 @@ An intentionally small native macOS menu-bar app for Claude Code and Codex subsc
 ## Requirements
 
 - macOS 14 or later
-- A logged-in `codex` CLI for Codex limits
-- A logged-in `claude` CLI for Claude Code limits
+- A logged-in `codex` CLI if you enable Codex limits
+- A logged-in `claude` CLI if you enable Claude Code limits
 
 ## Download
 
@@ -26,6 +26,15 @@ Each provider shows two menu-bar numbers: 5-hour remaining allowance above, week
 The panel shows horizontal remaining-allowance bars and a countdown to each reset followed by the local reset time, for example “2d 3h 15m (09-20 16:50)”.
 Missing windows display “—”. Expired Claude access tokens are renewed automatically.
 
+## Configure providers
+
+On first launch, the Provider Settings window opens. Enable Claude, Codex, or both after signing in with their CLI. You can return to this window from the menu-bar icon → Provider Settings. Only enabled providers are queried and shown in the menu bar and usage panel. Your selection is saved locally in macOS preferences.
+
+- **Claude:** Run `claude` in Terminal and use `/login` if prompted. LightUsageBar reads Claude Code's existing OAuth credentials from macOS Keychain.
+- **Codex:** Run `codex login` in Terminal. LightUsageBar reads limits through the locally authenticated `codex app-server` process.
+
+The settings window shows the result of the latest usage request and offers a button to copy each login command. After signing in, click **Refresh now**. LightUsageBar does not ask you to paste access tokens or passwords.
+
 ## Build and run
 
 ```bash
@@ -40,7 +49,7 @@ The app uses the menu bar only. It refreshes every five minutes and can be refre
 - Codex is queried through its local `codex app-server --stdio` protocol.
 - Claude's OAuth access token is read from the existing `Claude Code-credentials` Keychain entry and sent only to Anthropic's OAuth usage endpoint.
 - When that token has expired, the app renews it with Claude Code's refresh token at Anthropic's OAuth token endpoint and saves the result back to the same Keychain entry, exactly as Claude Code does. It holds Claude Code's own refresh lock while doing so, so the two never renew at the same time. This is needed because the Claude desktop app keeps its login separately and does not renew this entry.
-- No usage value or log is written to disk by this app, and no credential is stored anywhere except that Keychain entry.
+- No usage value or log is written to disk by this app. The enabled-provider selection is saved in macOS preferences; no credential is stored by LightUsageBar.
 
 The provider endpoints and CLI protocol can change. Errors are shown in the menu instead of being silently hidden.
 
